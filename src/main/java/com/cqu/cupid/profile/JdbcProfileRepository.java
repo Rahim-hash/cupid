@@ -109,5 +109,19 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to soft-delete profile with id " + id, e);
         }
     }
+    @Override
+    public void hardDelete(Long id) {
+        String sql = "DELETE FROM PROFILE WHERE id = ?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setLong(1, id);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to hard-delete profile with id " + id, e);
+        }
+    }
 
 }

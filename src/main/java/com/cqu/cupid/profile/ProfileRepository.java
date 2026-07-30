@@ -14,4 +14,5 @@ public interface ProfileRepository {
     Optional<Profile> findById(Long id);
 
     void softDelete(Long id);
+    void hardDelete(Long id);
 }
