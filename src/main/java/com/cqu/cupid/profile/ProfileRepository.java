@@ -12,6 +12,7 @@ public interface ProfileRepository {
     Profile save(Profile profile);
 
     Optional<Profile> findById(Long id);
+    Optional<Profile> findByIdIncludingDeleted(Long id);
 
     void softDelete(Long id);
     void hardDelete(Long id);

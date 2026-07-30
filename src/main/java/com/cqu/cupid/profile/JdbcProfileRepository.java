@@ -123,5 +123,34 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to hard-delete profile with id " + id, e);
         }
     }
+    @Override
+    public Optional<Profile> findByIdIncludingDeleted(Long id) {
+        String sql = "SELECT id, name, age, bio, profile_picture, deleted "
+                + "FROM PROFILE WHERE id = ?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setLong(1, id);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    Profile profile = new Profile();
+                    profile.setId(rs.getLong("id"));
+                    profile.setName(rs.getString("name"));
+                    profile.setAge(rs.getInt("age"));
+                    profile.setBio(rs.getString("bio"));
+                    profile.setProfilePicture(rs.getString("profile_picture"));
+                    profile.setDeleted(rs.getBoolean("deleted"));
+                    return Optional.of(profile);
+                } else {
+                    return Optional.empty();
+                }
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to find profile with id " + id, e);
+        }
+    }
 
 }
