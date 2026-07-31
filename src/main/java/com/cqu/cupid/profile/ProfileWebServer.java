@@ -25,6 +25,7 @@ public class ProfileWebServer {
         server.createContext("/", this::handleHome);
         server.createContext("/create", this::handleCreate);
         server.createContext("/view", this::handleView);
+        server.createContext("/delete", this::handleDelete);
         server.setExecutor(null);
         server.start();
         System.out.println("Cupid Profile server running at http://localhost:" + port);
@@ -43,6 +44,11 @@ public class ProfileWebServer {
                 + "<form method='GET' action='/view'>"
                 + "Profile ID: <input type='text' name='id'><br>"
                 + "<button type='submit'>Fetch</button>"
+                + "</form>"
+                + "<h2>Delete Profile</h2>"
+                + "<form method='POST' action='/delete'>"
+                + "Profile ID: <input type='text' name='id'><br>"
+                + "<button type='submit'>Delete</button>"
                 + "</form>";
         sendResponse(exchange, 200, html);
     }
@@ -98,6 +104,23 @@ public class ProfileWebServer {
             }
         } catch (NumberFormatException e) {
             sendResponse(exchange, 400, "Invalid id format");
+        }
+    }
+
+    private void handleDelete(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, "Method Not Allowed");
+            return;
+        }
+        Map<String, String> params = parseFormBody(exchange);
+        try {
+            Long id = Long.parseLong(params.get("id"));
+            profileService.deleteProfile(id);
+            sendResponse(exchange, 200,
+                "<h1>Profile Deleted</h1><p>ID " + id + " deleted.</p><a href='/'>Back</a>");
+        } catch (Exception e) {
+            sendResponse(exchange, 400,
+                "<h1>Error</h1><p>" + escapeHtml(e.getMessage()) + "</p><a href='/'>Back</a>");
         }
     }
 
