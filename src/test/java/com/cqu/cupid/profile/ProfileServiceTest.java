@@ -1,8 +1,11 @@
 package com.cqu.cupid.profile;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +43,21 @@ public class ProfileServiceTest {
         Optional<Profile> foundIncludingDeleted = repository.findByIdIncludingDeleted(saved.getId());
 
         assertFalse(foundIncludingDeleted.isPresent());
+    }
+    @Test
+    void uploadProfilePictureUpdatesProfileWithStoredPath() throws Exception {
+        ProfileRepository repository = new JdbcProfileRepository();
+        EthicsConfig ethicsConfig = new EthicsConfig();
+        ProfilePictureStorage pictureStorage = new ProfilePictureStorage();
+        ProfileService service = new ProfileService(repository, ethicsConfig, pictureStorage);
+
+        Profile saved = service.createProfile(new Profile("Farah", 26, "Loves photography"));
+        InputStream fakeImageData = new ByteArrayInputStream("fake image bytes".getBytes());
+
+        Profile updated = service.uploadProfilePicture(saved.getId(), fakeImageData, "avatar.png");
+
+        assertNotNull(updated.getProfilePicture());
+        assertTrue(updated.getProfilePicture().endsWith(".png"));
     }
 
 }
