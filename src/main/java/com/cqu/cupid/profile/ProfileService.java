@@ -43,5 +43,8 @@ public class ProfileService {
 
         return repository.save(profile);
     }
+    public Optional<Profile> findById(Long id) {
+        return repository.findById(id);
+    }
 
 }
