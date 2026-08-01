@@ -8,7 +8,7 @@ public class Main {
         ProfileValidator validator = new ProfileValidator();
         ProfileService service = new ProfileService(repository, ethicsConfig, pictureStorage, validator);
 
-        ProfileWebServer server = new ProfileWebServer(service);
+        ProfileWebServer server = new ProfileWebServer(service, ethicsConfig);
         server.start(8080);
     }
 }

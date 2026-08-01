@@ -21,6 +21,7 @@ import com.sun.net.httpserver.HttpServer;
 public class ProfileWebServer {
 
     private final ProfileService profileService;
+    private final EthicsConfig ethicsConfig;
 
     private static final String STYLE = "<style>"
             + "body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333;}"
@@ -34,8 +35,9 @@ public class ProfileWebServer {
             + ".avatar{width:150px;height:150px;border-radius:50%;object-fit:cover;border:3px solid #457b9d;}"
             + "</style>";
 
-    public ProfileWebServer(ProfileService profileService) {
+    public ProfileWebServer(ProfileService profileService, EthicsConfig ethicsConfig) {
         this.profileService = profileService;
+        this.ethicsConfig = ethicsConfig;
     }
 
     public void start(int port) throws IOException {
@@ -46,6 +48,7 @@ public class ProfileWebServer {
         server.createContext("/delete", this::handleDelete);
         server.createContext("/upload", this::handleUpload);
         server.createContext("/image", this::handleImage);
+        server.createContext("/settings", this::handleSettings);
         server.setExecutor(null);
         server.start();
         System.out.println("Cupid Profile server running at http://localhost:" + port);
@@ -53,6 +56,7 @@ public class ProfileWebServer {
 
     private void handleHome(HttpExchange exchange) throws IOException {
         String html = "<h1>Cupid - Profile</h1>"
+                + "<p><a href='/settings'>Ethics Settings</a></p>"
                 + "<h2>Create Profile</h2>"
                 + "<form method='POST' action='/create'>"
                 + "Name: <input type='text' name='name'><br>"
@@ -77,6 +81,28 @@ public class ProfileWebServer {
                 + "<button type='submit'>Upload</button>"
                 + "</form>";
 
+        sendResponse(exchange, 200, html);
+    }
+
+    private void handleSettings(HttpExchange exchange) throws IOException {
+        if ("POST".equals(exchange.getRequestMethod())) {
+            Map<String, String> params = parseFormBody(exchange);
+            boolean enabled = "true".equals(params.get("keepEthicsEnabled"));
+            ethicsConfig.setKeepEthicsEnabled(enabled);
+        }
+
+        String status = ethicsConfig.isKeepEthicsEnabled() ? "ENABLED (soft-delete)" : "DISABLED (hard-delete)";
+        String html = "<h1>Ethics Setting</h1>"
+                + "<p>Current mode: <strong>" + status + "</strong></p>"
+                + "<form method='POST' action='/settings'>"
+                + "<input type='hidden' name='keepEthicsEnabled' value='true'>"
+                + "<button type='submit'>Enable Ethics Mode (soft-delete)</button>"
+                + "</form>"
+                + "<form method='POST' action='/settings'>"
+                + "<input type='hidden' name='keepEthicsEnabled' value='false'>"
+                + "<button type='submit'>Disable Ethics Mode (hard-delete)</button>"
+                + "</form>"
+                + "<a href='/'>Back</a>";
         sendResponse(exchange, 200, html);
     }
 
