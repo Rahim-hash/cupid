@@ -14,7 +14,6 @@ public class JdbcProfileRepository implements ProfileRepository {
 
     public JdbcProfileRepository() {
         createTableIfNotExists();
-        
     }
 
     private Connection getConnection() throws SQLException {
@@ -38,8 +37,17 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to create PROFILE table", e);
         }
     }
+
     @Override
     public Profile save(Profile profile) {
+        if (profile.getId() == null) {
+            return insert(profile);
+        } else {
+            return update(profile);
+        }
+    }
+
+    private Profile insert(Profile profile) {
         String sql = "INSERT INTO PROFILE (name, age, bio, profile_picture, deleted) "
                 + "VALUES (?, ?, ?, ?, ?)";
 
@@ -63,9 +71,33 @@ public class JdbcProfileRepository implements ProfileRepository {
             return profile;
 
         } catch (SQLException e) {
-            throw new RuntimeException("Failed to save profile", e);
+            throw new RuntimeException("Failed to insert profile", e);
         }
     }
+
+    private Profile update(Profile profile) {
+        String sql = "UPDATE PROFILE SET name = ?, age = ?, bio = ?, profile_picture = ?, deleted = ? "
+                + "WHERE id = ?";
+
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, profile.getName());
+            stmt.setInt(2, profile.getAge());
+            stmt.setString(3, profile.getBio());
+            stmt.setString(4, profile.getProfilePicture());
+            stmt.setBoolean(5, profile.isDeleted());
+            stmt.setLong(6, profile.getId());
+
+            stmt.executeUpdate();
+
+            return profile;
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to update profile", e);
+        }
+    }
+
     @Override
     public Optional<Profile> findById(Long id) {
         String sql = "SELECT id, name, age, bio, profile_picture, deleted "
@@ -95,6 +127,7 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to find profile with id " + id, e);
         }
     }
+
     @Override
     public void softDelete(Long id) {
         String sql = "UPDATE PROFILE SET deleted = TRUE WHERE id = ?";
@@ -109,6 +142,7 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to soft-delete profile with id " + id, e);
         }
     }
+
     @Override
     public void hardDelete(Long id) {
         String sql = "DELETE FROM PROFILE WHERE id = ?";
@@ -123,6 +157,7 @@ public class JdbcProfileRepository implements ProfileRepository {
             throw new RuntimeException("Failed to hard-delete profile with id " + id, e);
         }
     }
+
     @Override
     public Optional<Profile> findByIdIncludingDeleted(Long id) {
         String sql = "SELECT id, name, age, bio, profile_picture, deleted "

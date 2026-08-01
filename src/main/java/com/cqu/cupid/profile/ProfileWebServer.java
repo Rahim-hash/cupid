@@ -1,11 +1,17 @@
 package com.cqu.cupid.profile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -15,6 +21,18 @@ import com.sun.net.httpserver.HttpServer;
 public class ProfileWebServer {
 
     private final ProfileService profileService;
+
+    private static final String STYLE = "<style>"
+            + "body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;padding:0 20px;color:#333;}"
+            + "h1{color:#e63946;}"
+            + "h2{color:#457b9d;margin-top:30px;}"
+            + "input,textarea{padding:8px;margin:4px 0;width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;}"
+            + "button{background:#e63946;color:white;border:none;padding:10px 20px;border-radius:4px;cursor:pointer;margin-top:8px;}"
+            + "button:hover{background:#d62828;}"
+            + "a{color:#457b9d;}"
+            + "form{margin-bottom:20px;}"
+            + ".avatar{width:150px;height:150px;border-radius:50%;object-fit:cover;border:3px solid #457b9d;}"
+            + "</style>";
 
     public ProfileWebServer(ProfileService profileService) {
         this.profileService = profileService;
@@ -26,6 +44,8 @@ public class ProfileWebServer {
         server.createContext("/create", this::handleCreate);
         server.createContext("/view", this::handleView);
         server.createContext("/delete", this::handleDelete);
+        server.createContext("/upload", this::handleUpload);
+        server.createContext("/image", this::handleImage);
         server.setExecutor(null);
         server.start();
         System.out.println("Cupid Profile server running at http://localhost:" + port);
@@ -49,7 +69,14 @@ public class ProfileWebServer {
                 + "<form method='POST' action='/delete'>"
                 + "Profile ID: <input type='text' name='id'><br>"
                 + "<button type='submit'>Delete</button>"
+                + "</form>"
+                + "<h2>Upload Profile Picture</h2>"
+                + "<form method='POST' action='/upload' enctype='multipart/form-data'>"
+                + "Profile ID: <input type='text' name='id'><br>"
+                + "Picture: <input type='file' name='picture'><br>"
+                + "<button type='submit'>Upload</button>"
                 + "</form>";
+
         sendResponse(exchange, 200, html);
     }
 
@@ -92,11 +119,16 @@ public class ProfileWebServer {
 
             if (profile.isPresent()) {
                 Profile p = profile.get();
+                String pictureHtml = (p.getProfilePicture() != null && !p.getProfilePicture().isBlank())
+                        ? "<p><img src='/image?id=" + p.getId() + "' class='avatar'></p>"
+                        : "<p>Picture: none uploaded yet</p>";
+
                 String html = "<h1>Profile</h1>"
                         + "<p>ID: " + p.getId() + "</p>"
                         + "<p>Name: " + escapeHtml(p.getName()) + "</p>"
                         + "<p>Age: " + p.getAge() + "</p>"
                         + "<p>Bio: " + escapeHtml(p.getBio()) + "</p>"
+                        + pictureHtml
                         + "<a href='/'>Back</a>";
                 sendResponse(exchange, 200, html);
             } else {
@@ -122,6 +154,107 @@ public class ProfileWebServer {
             sendResponse(exchange, 400,
                 "<h1>Error</h1><p>" + escapeHtml(e.getMessage()) + "</p><a href='/'>Back</a>");
         }
+    }
+
+    private void handleUpload(HttpExchange exchange) throws IOException {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, "Method Not Allowed");
+            return;
+        }
+        try {
+            String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+            String boundary = "--" + contentType.split("boundary=")[1];
+            byte[] bodyBytes = exchange.getRequestBody().readAllBytes();
+            String body = new String(bodyBytes, StandardCharsets.ISO_8859_1);
+
+            String[] parts = body.split(boundary);
+
+            Long id = null;
+            byte[] fileBytes = null;
+            String filename = "upload.jpg";
+
+            for (String part : parts) {
+                if (part.contains("name=\"id\"")) {
+                    int start = part.indexOf("\r\n\r\n") + 4;
+                    int end = part.lastIndexOf("\r\n");
+                    if (start < end) {
+                        id = Long.parseLong(part.substring(start, end).trim());
+                    }
+                }
+                if (part.contains("name=\"picture\"")) {
+                    if (part.contains("filename=\"")) {
+                        int fnStart = part.indexOf("filename=\"") + 10;
+                        int fnEnd = part.indexOf("\"", fnStart);
+                        filename = part.substring(fnStart, fnEnd);
+                    }
+                    int start = part.indexOf("\r\n\r\n") + 4;
+                    int end = part.lastIndexOf("\r\n");
+                    if (start < end) {
+                        String fileContent = part.substring(start, end);
+                        fileBytes = fileContent.getBytes(StandardCharsets.ISO_8859_1);
+                    }
+                }
+            }
+
+            if (id == null || fileBytes == null || fileBytes.length == 0) {
+                sendResponse(exchange, 400, "<h1>Error</h1><p>Missing id or file</p><a href='/'>Back</a>");
+                return;
+            }
+
+            InputStream imageData = new ByteArrayInputStream(fileBytes);
+            Profile updated = profileService.uploadProfilePicture(id, imageData, filename);
+
+            String html = "<h1>Picture Uploaded</h1>"
+                    + "<p>Stored at: " + escapeHtml(updated.getProfilePicture()) + "</p>"
+                    + "<a href='/'>Back</a>";
+            sendResponse(exchange, 200, html);
+        } catch (Exception e) {
+            sendResponse(exchange, 400, "<h1>Error</h1><p>" + escapeHtml(e.getMessage()) + "</p><a href='/'>Back</a>");
+        }
+    }
+
+    private void handleImage(HttpExchange exchange) throws IOException {
+        Map<String, String> params = parseQueryString(exchange.getRequestURI().getQuery());
+        String idParam = params.get("id");
+
+        if (idParam == null) {
+            exchange.sendResponseHeaders(400, -1);
+            return;
+        }
+
+        try {
+            Long id = Long.parseLong(idParam);
+            Optional<Profile> profile = profileServiceFind(id);
+
+            if (profile.isEmpty() || profile.get().getProfilePicture() == null) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+
+            Path imagePath = Paths.get(profile.get().getProfilePicture());
+            if (!Files.exists(imagePath)) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+
+            byte[] imageBytes = Files.readAllBytes(imagePath);
+            String contentType = guessContentType(imagePath.toString());
+
+            exchange.getResponseHeaders().put("Content-Type", List.of(contentType));
+            exchange.sendResponseHeaders(200, imageBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(imageBytes);
+            }
+        } catch (NumberFormatException e) {
+            exchange.sendResponseHeaders(400, -1);
+        }
+    }
+
+    private String guessContentType(String filename) {
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".gif")) return "image/gif";
+        return "image/jpeg";
     }
 
     private Optional<Profile> profileServiceFind(Long id) {
@@ -161,8 +294,9 @@ public class ProfileWebServer {
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String html) throws IOException {
-        exchange.getResponseHeaders().put("Content-Type", java.util.List.of("text/html"));
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
+        String fullHtml = "<html><head>" + STYLE + "</head><body>" + html + "</body></html>";
+        exchange.getResponseHeaders().put("Content-Type", List.of("text/html"));
+        byte[] bytes = fullHtml.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
