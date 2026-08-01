@@ -17,6 +17,7 @@ public class JdbcProfileRepository implements ProfileRepository {
     }
 
     private Connection getConnection() throws SQLException {
+        DriverManager.setLoginTimeout(5);
         return DriverManager.getConnection(DB_URL, "sa", "");
     }
 
